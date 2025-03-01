@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Requests</title>
+    
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .badge {
+            font-size: 14px;
+            padding: 6px 12px;
+            transition: 0.3s;
+        }
+        .btn-action {
+            min-width: 100px;
+        }
+        .btn-action:hover {
+            transform: scale(1.05);
+        }
+        .top-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Back and Logout Buttons -->
+    <div class="top-buttons">
+        <button class="btn btn-secondary" onclick="goBack()">
+            ⬅️ Back
+        </button>
+        <button class="btn btn-danger" onclick="logout()">
+            🔴 Logout
+        </button>
+    </div>
+
+    <h2 class="text-center mb-4">📦 Inventory Requests</h2>
+    
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Item</th>
+                <th>Quantity</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="requestsTableBody">
+            <!-- Requests will be loaded here -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+
+    function goBack() {
+        const role = localStorage.getItem("role");
+
+        if (role === "MANAGER 1") {
+            window.location.href = "manager1.html";
+        } else if (role === "MANAGER 2") {
+            window.location.href = "manager2.html";
+        } else if (role === "ADMIN") {
+            window.location.href = "admin.html";
+          } else {
+            alert("Invalid role detected! Redirecting to login...");
+            window.location.href = "index.html";
+        }
+      }
+
+
+    function logout() {
+        if (confirm("Are you sure you want to logout?")) {
+            localStorage.clear();
+            window.location.href = "index.html";
+        }
+    }
+
+    async function loadRequests() {
+        try {
+            const response = await fetch("http://localhost:5000/api/requests", {
+                method: "GET",
+                headers: {
+                    "Authorization": "Bearer " + localStorage.getItem("token"),
+                    "Content-Type": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to load requests.");
+            }
+
+            const requests = await response.json();
+            const tableBody = document.getElementById("requestsTableBody");
+            tableBody.innerHTML = "";
+
+            requests.forEach(req => {
+                let statusBadge = "";
+                if (req.status === "PENDING") {
+                    statusBadge = `<span class="badge bg-warning">Pending</span>`;
+                } else if (req.status === "APPROVED") {
+                    statusBadge = `<span class="badge bg-success">Approved</span>`;
+                } else {
+                    statusBadge = `<span class="badge bg-danger">Rejected</span>`;
+                }
+
+                const row = `<tr>
+                    <td>${req.id}</td>
+                    <td>${req.user || "N/A"}</td>
+                    <td>${req.item_name}</td>
+                    <td>${req.quantity}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        ${req.status === "PENDING" ? `
+                            <button class="btn btn-success btn-sm btn-action me-1" onclick="updateRequest(${req.id}, 'APPROVED', this)">
+                                <i class="fas fa-check"></i> Approve
+                            </button>
+                            <button class="btn btn-danger btn-sm btn-action" onclick="updateRequest(${req.id}, 'REJECTED', this)">
+                                <i class="fas fa-times"></i> Reject
+                            </button>
+                        ` : `<span class="text-muted">No action</span>`}
+                    </td>
+                </tr>`;
+                tableBody.innerHTML += row;
+            });
+        } catch (error) {
+            console.error("Error loading requests:", error);
+            alert(error.message);
+        }
+    }
+
+    async function updateRequest(requestId, status, button) {
+        if (!confirm(`Are you sure you want to ${status.toLowerCase()} request #${requestId}?`)) return;
+
+        try {
+            button.disabled = true;
+            button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing...`;
+
+            const response = await fetch(`http://localhost:5000/api/requests/${requestId}`, {
+                method: "PUT",
+                headers: {
+                    "Authorization": "Bearer " + localStorage.getItem("token"),
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ status })
+            });
+
+            if (!response.ok) {
+                throw new Error("Failed to update request.");
+            }
+
+            alert(`Request #${requestId} updated to ${status}`);
+            loadRequests(); // Refresh the table
+        } catch (error) {
+            console.error("Error updating request:", error);
+            alert(error.message);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", loadRequests);
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

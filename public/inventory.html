@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles/styles.css">
+    <style>
+        body {
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            height: 100vh;
+            background: #343a40;
+            color: white;
+            padding: 20px;
+            position: fixed;
+        }
+        .sidebar a {
+            color: white;
+            display: block;
+            padding: 10px;
+            text-decoration: none;
+        }
+        .sidebar a:hover {
+            background: #495057;
+        }
+        .content {
+            margin-left: 260px;
+            padding: 20px;
+            width: 100%;
+        }
+    </style>
+
+    <script>
+        // Authentication check before page load
+        const token = localStorage.getItem("token");
+        const role = localStorage.getItem("role");
+
+        if (!token || !(role === "ADMIN" || role === "STORE KEEPER")) {
+            alert("Unauthorized Access!");
+            window.location.href = "index.html";
+        }
+    </script>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h4 id="panelTitle">Admin Panel</h4>
+        <a href="admin.html">Dashboard</a>
+        <a href="inventory.html">Manage Inventory</a>
+        <button class="btn btn-danger w-100 mt-3" id="logoutBtn">Logout</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content">
+        <h2>Inventory Management</h2>
+        <button class="btn btn-primary mb-3" id="addItemBtn">Add New Item</button>
+
+        <!-- Inventory Table -->
+        <table class="table table-bordered">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Item Name</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="inventoryTable">
+                <!-- Inventory items will be loaded here -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Add/Edit Inventory Modal -->
+    <div class="modal fade" id="inventoryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Inventory Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="inventoryForm">
+                        <input type="hidden" id="inventoryId">
+                        <div class="mb-3">
+                            <label>Item Name</label>
+                            <input type="text" id="itemName" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label>Quantity</label>
+                            <input type="number" id="quantity" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label>Price</label>
+                            <input type="number" id="price" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">Save Item</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap & JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_URL = "http://localhost:5000/api/inventory";
+        
+        // Logout function with confirmation
+        document.getElementById("logoutBtn").addEventListener("click", () => {
+            if (confirm("Are you sure you want to logout?")) {
+                localStorage.clear();
+                window.location.href = "index.html";
+            }
+        });
+
+        // Change sidebar title based on role
+        document.getElementById("panelTitle").textContent = 
+            localStorage.getItem("role") === "ADMIN" ? "Admin Panel" : "Store Keeper Panel";
+
+        // Hide "Add New Item" button if user is not an ADMIN
+        if (localStorage.getItem("role") !== "ADMIN") {
+            document.getElementById("addItemBtn").style.display = "none";
+        }
+
+        // Fetch Inventory Data
+        async function loadInventory() {
+            try {
+                const token = localStorage.getItem("token");
+                const response = await fetch(API_URL, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (!response.ok) throw new Error("Failed to load inventory.");
+
+                const items = await response.json();
+                const inventoryTable = document.getElementById("inventoryTable");
+                inventoryTable.innerHTML = "";
+
+                items.forEach(item => {
+                    let actionButtons = "";
+
+                    if (role === "ADMIN") {
+                        actionButtons = `
+                            <button class="btn btn-warning btn-sm" onclick="editItem(${item.id}, '${item.item_name}', ${item.quantity}, ${item.price})">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id}, '${item.item_name}')">Delete</button>
+                        `;
+                    }
+
+                    inventoryTable.innerHTML += `
+                        <tr>
+                            <td>${item.id}</td>
+                            <td>${item.item_name}</td>
+                            <td>${item.quantity}</td>
+                            <td>${item.price}</td>
+                            <td>${actionButtons}</td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                alert("Error fetching inventory. Please try again later.");
+                console.error(error);
+            }
+        }
+
+        // Delete Inventory Item (Admin only)
+        async function deleteItem(id, name) {
+            if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+
+            try {
+                const token = localStorage.getItem("token");
+                await fetch(`${API_URL}/delete/${id}`, {
+                    method: "DELETE",
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                loadInventory();
+            } catch (error) {
+                alert("Error deleting item.");
+                console.error(error);
+            }
+        }
+
+        // Open Modal to Add Item
+        document.getElementById("addItemBtn")?.addEventListener("click", () => {
+            document.getElementById("inventoryId").value = "";
+            document.getElementById("itemName").value = "";
+            document.getElementById("quantity").value = "";
+            document.getElementById("price").value = "";
+
+            const modal = new bootstrap.Modal(document.getElementById("inventoryModal"));
+            modal.show();
+        });
+
+        // Open Modal to Edit Item
+        function editItem(id, name, quantity, price) {
+            document.getElementById("inventoryId").value = id;
+            document.getElementById("itemName").value = name;
+            document.getElementById("quantity").value = quantity;
+            document.getElementById("price").value = price;
+
+            const modal = new bootstrap.Modal(document.getElementById("inventoryModal"));
+            modal.show();
+        }
+
+        // Submit Inventory Form (Admin only)
+        document.getElementById("inventoryForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            const id = document.getElementById("inventoryId").value;
+            const item_name = document.getElementById("itemName").value;
+            const quantity = document.getElementById("quantity").value;
+            const price = document.getElementById("price").value;
+
+            try {
+                const token = localStorage.getItem("token");
+                const method = id ? "PUT" : "POST";
+                const url = id ? `${API_URL}/edit/${id}` : `${API_URL}/add`;
+
+                await fetch(url, {
+                    method,
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ item_name, quantity, price })
+                });
+
+                loadInventory();
+                bootstrap.Modal.getInstance(document.getElementById("inventoryModal"))?.hide();
+            } catch (error) {
+                alert("Error saving item.");
+                console.error(error);
+            }
+        });
+
+        // Load inventory on page load
+        loadInventory();
+    </script>
+</body>
+</html>

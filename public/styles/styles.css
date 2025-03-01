@@ -1,0 +1,41 @@
+body {
+  background-color: #f8f9fa;
+}
+
+.container {
+  max-width: 500px;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+}
+
+h2 {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.alert {
+  text-align: center;
+}
+
+.btn {
+  width: 100%;
+}
+
+.form-control {
+  border-radius: 5px;
+}
+
+.text-center {
+  margin-top: 15px;
+}
+
+a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
