@@ -117,6 +117,8 @@
         // Fetch inventory data
         async function loadInventory() {
             try {
+                document.getElementById("inventoryList").innerHTML = `<tr><td colspan="3" class="text-muted text-center">Loading...</td></tr>`;
+
                 const response = await fetch(`${API_URL}/inventory`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -133,7 +135,7 @@
                         <td>${item.item_name}</td>
                         <td>${item.quantity}</td>
                         <td>
-                            <button class="btn btn-success btn-sm" onclick="requestItem('${item.id}', '${item.item_name}')">Request</button>
+                            <button class="btn btn-success btn-sm" onclick="requestItem('${item.item_id}', '${item.item_name}')">Request</button>
                         </td>
                     </tr>`).join("");
             } catch (error) {
@@ -141,13 +143,17 @@
             }
         }
 
-        // Request an item
+        // Request an item (UPDATED)
         async function requestItem(itemId, itemName) {
             const quantity = prompt(`Enter quantity for ${itemName}:`);
             if (!quantity || isNaN(quantity) || quantity <= 0) {
                 alert("Invalid quantity.");
                 return;
             }
+
+            const requestData = { userId, itemId, quantity };
+
+            console.log("Sending request:", requestData);
 
             try {
                 const response = await fetch(`${API_URL}/requests`, {
@@ -156,10 +162,11 @@
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${token}`
                     },
-                    body: JSON.stringify({ userId, itemId, quantity }) 
+                    body: JSON.stringify(requestData)
                 });
 
                 const result = await response.json();
+
                 if (!response.ok) {
                     throw new Error(result.message || "Failed to submit request");
                 }
@@ -189,6 +196,7 @@
         async function loadRequests() {
             try {
                 console.log("Fetching requests for user:", userId);
+                document.getElementById("requestsList").innerHTML = `<tr><td colspan="4" class="text-muted text-center">Loading...</td></tr>`;
 
                 const response = await fetch(`${API_URL}/requests?userId=${userId}`, {
                     headers: { Authorization: `Bearer ${token}` }

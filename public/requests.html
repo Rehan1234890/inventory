@@ -24,13 +24,9 @@
         .badge {
             font-size: 14px;
             padding: 6px 12px;
-            transition: 0.3s;
         }
         .btn-action {
             min-width: 100px;
-        }
-        .btn-action:hover {
-            transform: scale(1.05);
         }
         .top-buttons {
             display: flex;
@@ -42,16 +38,11 @@
 <body>
 
 <div class="container">
-    <!-- Back and Logout Buttons -->
     <div class="top-buttons">
-        <button class="btn btn-secondary" onclick="goBack()">
-            ⬅️ Back
-        </button>
-        <button class="btn btn-danger" onclick="logout()">
-            🔴 Logout
-        </button>
+        <button class="btn btn-secondary" onclick="goBack()">⬅️ Back</button>
+        <button class="btn btn-danger" onclick="logout()">🔴 Logout</button>
     </div>
-
+    
     <h2 class="text-center mb-4">📦 Inventory Requests</h2>
     
     <table class="table table-bordered table-striped">
@@ -66,28 +57,25 @@
             </tr>
         </thead>
         <tbody id="requestsTableBody">
-            <!-- Requests will be loaded here -->
+            <!-- Requests will be dynamically loaded here -->
         </tbody>
     </table>
 </div>
 
 <script>
-
     function goBack() {
         const role = localStorage.getItem("role");
-
         if (role === "MANAGER 1") {
             window.location.href = "manager1.html";
         } else if (role === "MANAGER 2") {
             window.location.href = "manager2.html";
         } else if (role === "ADMIN") {
             window.location.href = "admin.html";
-          } else {
+        } else {
             alert("Invalid role detected! Redirecting to login...");
             window.location.href = "index.html";
         }
-      }
-
+    }
 
     function logout() {
         if (confirm("Are you sure you want to logout?")) {
@@ -95,7 +83,6 @@
             window.location.href = "index.html";
         }
     }
-
     async function loadRequests() {
         try {
             const response = await fetch("http://localhost:5000/api/requests", {
@@ -114,34 +101,57 @@
             const tableBody = document.getElementById("requestsTableBody");
             tableBody.innerHTML = "";
 
+            const userRole = localStorage.getItem("role");
+
             requests.forEach(req => {
-                let statusBadge = "";
-                if (req.status === "PENDING") {
-                    statusBadge = `<span class="badge bg-warning">Pending</span>`;
-                } else if (req.status === "APPROVED") {
-                    statusBadge = `<span class="badge bg-success">Approved</span>`;
-                } else {
-                    statusBadge = `<span class="badge bg-danger">Rejected</span>`;
+                let status = req.status.toLowerCase();
+                let statusBadge = `<span class="badge bg-secondary">${status}</span>`;
+                if (status === "pending") statusBadge = '<span class="badge bg-warning">Pending</span>';
+                if (status === "verified1") statusBadge = '<span class="badge bg-info">Verified 1</span>';
+                if (status === "verified2") statusBadge = '<span class="badge bg-primary">Verified 2</span>';
+                if (status === "approved") statusBadge = '<span class="badge bg-success">Approved</span>';
+                if (status === "rejected") statusBadge = '<span class="badge bg-danger">Rejected</span>';
+
+                let actionButtons = `<span class="text-muted">No action</span>`;
+
+                // Role-based action buttons
+                if (status === "pending" && userRole === "MANAGER 1") {
+                    actionButtons = `
+                        <button class="btn btn-info btn-sm btn-action me-1" onclick="updateRequest(${req.id}, 'verified1', this)">
+                            <i class="fas fa-check"></i> Verify 1
+                        </button>
+                        <button class="btn btn-danger btn-sm btn-action" onclick="updateRequest(${req.id}, 'rejected', this)">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
+                    `;
+                } else if (status === "verified1" && userRole === "MANAGER 2") {
+                    actionButtons = `
+                        <button class="btn btn-primary btn-sm btn-action me-1" onclick="updateRequest(${req.id}, 'verified2', this)">
+                            <i class="fas fa-check"></i> Verify 2
+                        </button>
+                        <button class="btn btn-danger btn-sm btn-action" onclick="updateRequest(${req.id}, 'rejected', this)">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
+                    `;
+                } else if (status === "verified2" && userRole === "ADMIN") {
+                    actionButtons = `
+                        <button class="btn btn-success btn-sm btn-action me-1" onclick="updateRequest(${req.id}, 'approved', this)">
+                            <i class="fas fa-check"></i> Approve
+                        </button>
+                        <button class="btn btn-danger btn-sm btn-action" onclick="updateRequest(${req.id}, 'rejected', this)">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
+                    `;
                 }
 
-                const row = `<tr>
+                tableBody.innerHTML += `<tr>
                     <td>${req.id}</td>
                     <td>${req.user || "N/A"}</td>
                     <td>${req.item_name}</td>
                     <td>${req.quantity}</td>
                     <td>${statusBadge}</td>
-                    <td>
-                        ${req.status === "PENDING" ? `
-                            <button class="btn btn-success btn-sm btn-action me-1" onclick="updateRequest(${req.id}, 'APPROVED', this)">
-                                <i class="fas fa-check"></i> Approve
-                            </button>
-                            <button class="btn btn-danger btn-sm btn-action" onclick="updateRequest(${req.id}, 'REJECTED', this)">
-                                <i class="fas fa-times"></i> Reject
-                            </button>
-                        ` : `<span class="text-muted">No action</span>`}
-                    </td>
+                    <td>${actionButtons}</td>
                 </tr>`;
-                tableBody.innerHTML += row;
             });
         } catch (error) {
             console.error("Error loading requests:", error);
@@ -150,7 +160,7 @@
     }
 
     async function updateRequest(requestId, status, button) {
-        if (!confirm(`Are you sure you want to ${status.toLowerCase()} request #${requestId}?`)) return;
+        if (!confirm(`Are you sure you want to mark request #${requestId} as ${status.toLowerCase()}?`)) return;
 
         try {
             button.disabled = true;
@@ -162,15 +172,15 @@
                     "Authorization": "Bearer " + localStorage.getItem("token"),
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({ status })
+                body: JSON.stringify({ status: status.toLowerCase() }) 
             });
 
             if (!response.ok) {
                 throw new Error("Failed to update request.");
             }
 
-            alert(`Request #${requestId} updated to ${status}`);
-            loadRequests(); // Refresh the table
+            alert(`Request #${requestId} marked as ${status}`);
+            loadRequests();
         } catch (error) {
             console.error("Error updating request:", error);
             alert(error.message);
@@ -178,6 +188,8 @@
     }
 
     document.addEventListener("DOMContentLoaded", loadRequests);
+
+
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

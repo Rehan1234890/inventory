@@ -52,14 +52,23 @@
 
         <div class="row">
             <!-- View Inventory Button -->
-            <div class="col-md-12">
+            <div class="col-md-12 mb-3">
                 <div class="card shadow-sm">
                     <div class="card-body text-center">
                         <h5 class="card-title">View Inventory</h5>
                         <p class="card-text">Check stock levels and available items.</p>
-                        <button class="btn btn-primary btn-lg" id="viewStock">
-                            📋 View Inventory
-                        </button>
+                        <button class="btn btn-primary btn-lg" id="viewStock">📋 View Inventory</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Handover Requests -->
+            <div class="col-md-12">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">Handover Items</h5>
+                        <p class="card-text">Update approved requests to "Handed Over".</p>
+                        <button class="btn btn-warning btn-lg" id="handoverRequests">🚚 Handover Items</button>
                     </div>
                 </div>
             </div>
@@ -78,6 +87,11 @@
         // Redirect to Inventory Page
         document.getElementById("viewStock").addEventListener("click", () => {
             window.location.href = "inventory.html";
+        });
+
+        // Redirect to Handover Requests Page
+        document.getElementById("handoverRequests").addEventListener("click", () => {
+            window.location.href = "handover_requests.html";
         });
     </script>
 
