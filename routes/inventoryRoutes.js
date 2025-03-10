@@ -63,7 +63,7 @@ router.post("/add", authenticateToken, checkPermission("manage_inventory"), asyn
 
 /**
  * @swagger
- * /api/inventory/edit/{id}:
+ * /api/inventory/edit/{item_id}:
  *   put:
  *     summary: Edit an existing inventory item
  *     tags: [Inventory]
@@ -71,7 +71,7 @@ router.post("/add", authenticateToken, checkPermission("manage_inventory"), asyn
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: item_id
  *         required: true
  *         schema:
  *           type: integer
@@ -96,18 +96,17 @@ router.post("/add", authenticateToken, checkPermission("manage_inventory"), asyn
  *       500:
  *         description: Internal server error
  */
-router.put("/edit/:id", authenticateToken, checkPermission("manage_inventory"), async (req, res) => {
+router.put("/edit/:item_id", authenticateToken, checkPermission("manage_inventory"), async (req, res) => {
     try {
         const { item_name, quantity, price } = req.body;
-        const { id } = req.params;
+        const { item_id } = req.params;
 
-        const [existing] = await db.execute("SELECT * FROM inventory WHERE id = ?", [id]);
-        if (existing.length === 0) {
+        const [result] = await db.execute("UPDATE inventory SET item_name = ?, quantity = ?, price = ? WHERE item_id = ?", 
+            [item_name, quantity, price, item_id]);
+
+        if (result.affectedRows === 0) {
             return res.status(404).json({ message: "Item not found" });
         }
-
-        await db.execute("UPDATE inventory SET item_name = ?, quantity = ?, price = ? WHERE id = ?", 
-            [item_name, quantity, price, id]);
 
         res.json({ message: "Item updated successfully!" });
     } catch (error) {
@@ -142,7 +141,7 @@ router.get("/", authenticateToken, async (req, res) => {
 
 /**
  * @swagger
- * /api/inventory/{id}:
+ * /api/inventory/{item_id}:
  *   get:
  *     summary: Get a single inventory item
  *     tags: [Inventory]
@@ -150,7 +149,7 @@ router.get("/", authenticateToken, async (req, res) => {
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: item_id
  *         required: true
  *         schema:
  *           type: integer
@@ -162,10 +161,10 @@ router.get("/", authenticateToken, async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.get("/:id", authenticateToken, async (req, res) => {
+router.get("/:item_id", authenticateToken, async (req, res) => {
     try {
-        const { id } = req.params;
-        const [item] = await db.execute("SELECT * FROM inventory WHERE id = ?", [id]);
+        const { item_id } = req.params;
+        const [item] = await db.execute("SELECT * FROM inventory WHERE item_id = ?", [item_id]);
 
         if (item.length === 0) {
             return res.status(404).json({ message: "Item not found" });
@@ -180,7 +179,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
 /**
  * @swagger
- * /api/inventory/delete/{id}:
+ * /api/inventory/delete/{item_id}:
  *   delete:
  *     summary: Delete an inventory item
  *     tags: [Inventory]
@@ -188,7 +187,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: item_id
  *         required: true
  *         schema:
  *           type: integer
@@ -200,10 +199,10 @@ router.get("/:id", authenticateToken, async (req, res) => {
  *       500:
  *         description: Internal server error
  */
-router.delete('/delete/:id', authenticateToken, checkPermission("manage_inventory"), async (req, res) => {
+router.delete('/delete/:item_id', authenticateToken, checkPermission("manage_inventory"), async (req, res) => {
     try {
-        const { id } = req.params;
-        const [result] = await db.execute('DELETE FROM inventory WHERE id = ?', [id]);
+        const { item_id } = req.params;
+        const [result] = await db.execute('DELETE FROM inventory WHERE item_id = ?', [item_id]);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: "Item not found" });
@@ -217,4 +216,3 @@ router.delete('/delete/:id', authenticateToken, checkPermission("manage_inventor
 });
 
 module.exports = router;
-

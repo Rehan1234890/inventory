@@ -30,7 +30,7 @@ const db = require("../config/db");
  *           description: Quantity requested
  *         status:
  *           type: string
- *           enum: [PENDING, APPROVED, REJECTED]
+ *           enum: [PENDING, APPROVED, REJECTED, VERIFIED, HANDED OVER]
  *           description: Status of the request
  */
 
@@ -111,9 +111,9 @@ router.get("/", authenticateToken, async (req, res) => {
         let values = [];
 
         if (req.user.role === "ADMIN" || req.user.role.includes("MANAGER")) {
-            sql = "SELECT r.id, u.name AS user, i.item_name, r.quantity, r.status FROM requests r JOIN users u ON r.user_id = u.id JOIN inventory i ON r.item_id = i.id";
+            sql = "SELECT r.id, u.name AS user, i.item_name, r.quantity, r.status FROM requests r JOIN users u ON r.user_id = u.id JOIN inventory i ON r.item_id = i.item_id";
         } else {
-            sql = "SELECT r.id, i.item_name, r.quantity, r.status FROM requests r JOIN inventory i ON r.item_id = i.id WHERE r.user_id = ?";
+            sql = "SELECT r.id, i.item_name, r.quantity, r.status FROM requests r JOIN inventory i ON r.item_id = i.item_id WHERE r.user_id = ?";
             values = [req.user.id];
         }
 
@@ -151,8 +151,8 @@ router.get("/", authenticateToken, async (req, res) => {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [APPROVED, REJECTED]
- *                 example: APPROVED
+ *                 enum: [verified, approved, rejected]
+ *                 example: approved
  *     responses:
  *       200:
  *         description: Request updated successfully
@@ -169,27 +169,182 @@ router.put("/:id", authenticateToken, async (req, res) => {
     try {
         const { status } = req.body;
         const requestId = req.params.id;
-        const allowedStatuses = ["APPROVED", "REJECTED"];
+        const newStatus = status.toLowerCase(); // Ensure case-insensitive comparison
 
-        if (!allowedStatuses.includes(status)) {
-            return res.status(400).json({ message: "Invalid status. Allowed values: APPROVED, REJECTED" });
+        const allowedTransitions = {
+            "pending": ["verified1", "rejected"],
+            "verified1": ["verified2", "rejected"],
+            "verified2": ["approved", "rejected"],
+            "approved": ["handed over"]
+        };
+
+        // Fetch current status from DB
+        const [rows] = await db.execute("SELECT LOWER(status) as status FROM requests WHERE id = ?", [requestId]);
+        if (rows.length === 0) return res.status(404).json({ message: "Request not found" });
+
+        const currentStatus = rows[0].status;
+
+        console.log(`Updating request #${requestId}: ${currentStatus} → ${newStatus}`);
+
+        // Ensure valid status transitions
+        if (!allowedTransitions[currentStatus] || !allowedTransitions[currentStatus].includes(newStatus)) {
+            return res.status(400).json({ message: `Invalid transition from ${currentStatus} to ${newStatus}` });
         }
 
-        if (!["ADMIN", "MANAGER 1", "MANAGER 2"].includes(req.user.role)) {
-            return res.status(403).json({ message: "Unauthorized to update request status" });
+        // Role-based validation
+        const role = req.user.role;
+        if ((newStatus === "verified1" && role !== "MANAGER 1") ||
+            (newStatus === "verified2" && role !== "MANAGER 2") ||
+            (newStatus === "approved" && role !== "ADMIN")) {
+            return res.status(403).json({ message: `Unauthorized: Only ${role} can update to ${newStatus}` });
         }
 
-        const [result] = await db.execute("UPDATE requests SET status = ? WHERE id = ?", [status, requestId]);
+        // Update request status in DB
+        const [result] = await db.execute("UPDATE requests SET status = ? WHERE id = ?", [newStatus, requestId]);
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({ message: "Request not found" });
+            console.error(`No rows updated for request #${requestId}`);
+            return res.status(404).json({ message: "Request not found or already updated" });
         }
 
-        res.json({ message: "Request updated successfully" });
+        console.log(`✅ Request #${requestId} successfully updated to ${newStatus}`);
+        res.json({ message: `Request updated to ${newStatus} successfully` });
+
     } catch (error) {
-        console.error("Error updating request:", error);
+        console.error("❌ Error updating request:", error);
         res.status(500).json({ message: "Server error" });
     }
 });
+
+
+/**
+ * @swagger
+ * /api/requests/approved-requests:
+ *   get:
+ *     summary: Get all approved requests
+ *     tags: [Requests]
+ *     responses:
+ *       200:
+ *         description: List of approved requests
+ *       500:
+ *         description: Database error
+ */
+router.get("/approved-requests", authenticateToken, async (req, res) => {
+    try {
+        const sql = `
+            SELECT r.id, u.name AS user_name, i.item_name, r.quantity, r.status 
+            FROM requests r
+            LEFT JOIN users u ON r.user_id = u.id
+            JOIN inventory i ON r.item_id = i.item_id
+            WHERE r.status = 'approved'
+        `;
+
+        const [rows] = await db.execute(sql);
+
+        console.log("Approved Requests:", rows); // Debugging output
+
+        res.json(rows);
+    } catch (error) {
+        console.error("Database error:", error);
+        res.status(500).json({ error: "Database Error" });
+    }
+});
+
+
+/**
+ * @swagger
+ * /api/requests/handover:
+ *   post:
+ *     summary: Handover an approved request and update inventory
+ *     tags: [Requests]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - requestId
+ *               - itemId
+ *               - quantity
+ *             properties:
+ *               requestId:
+ *                 type: integer
+ *               itemId:
+ *                 type: integer
+ *               quantity:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Item handed over successfully
+ *       500:
+ *         description: Database update failed
+ */
+router.post("/handover", authenticateToken, async (req, res) => {
+    const connection = await db.getConnection();
+
+    try {
+        console.log("Handover Request Body:", req.body); // Debugging log
+
+        const { requestId, quantity } = req.body;
+
+        if (!requestId || !quantity) {
+            console.error("Missing Data:", { requestId, quantity });
+            return res.status(400).json({ message: "Missing required fields: requestId, quantity" });
+        }
+
+        await connection.beginTransaction();
+
+        // 🛠️ Fetch itemId and item_name from the requests and inventory tables
+        const [requestResult] = await connection.execute(
+            `SELECT r.item_id, i.item_name 
+             FROM requests r 
+             JOIN inventory i ON r.item_id = i.item_id 
+             WHERE r.id = ?`,
+            [requestId]
+        );
+
+        if (requestResult.length === 0) {
+            return res.status(404).json({ message: "Request not found" });
+        }
+
+        const { item_id: itemId, item_name: itemName } = requestResult[0];
+        console.log(`Resolved itemId: ${itemId}, itemName: ${itemName} for requestId: ${requestId}`);
+
+        // 🛠️ Check if inventory has enough stock
+        const [inventory] = await connection.execute("SELECT * FROM inventory WHERE item_id = ?", [itemId]);
+        if (inventory.length === 0) {
+            return res.status(404).json({ message: "Item not found in inventory" });
+        }
+
+        if (inventory[0].quantity < quantity) {
+            return res.status(400).json({ message: "Not enough stock available" });
+        }
+
+        // 🛠️ Update request status
+        await connection.execute("UPDATE requests SET status = 'HANDED OVER' WHERE id = ?", [requestId]);
+
+        // 🛠️ Deduct quantity from inventory
+        await connection.execute("UPDATE inventory SET quantity = quantity - ? WHERE item_id = ?", [quantity, itemId]);
+
+        await connection.commit();
+
+        res.json({ 
+            success: true, 
+            message: "Item handed over successfully.", 
+            requestDetails: { requestId, itemId, itemName, quantity },
+            itemDetails: inventory[0] 
+        });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("Database update error:", err);
+        res.status(500).json({ error: "Database Update Failed" });
+    } finally {
+        connection.release();
+    }
+});
+
+
 
 module.exports = router;
